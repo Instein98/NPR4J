@@ -4,10 +4,12 @@ import os, sys, re
 from os.path import *
 import javalang
 from javalang.ast import Node
+from pathlib import Path
 
 def get_sample_ids(mutants_root_dir:str, projs:list):
     sample_ids = []
     for proj in projs:
+        #  Todo: collections-25f?
         proj_dir = join(mutant_root_dir, proj + '-1f')
         sample_id_file = join(proj_dir, 'sampledMutIds.txt')
         with open(sample_id_file) as f:
@@ -77,7 +79,7 @@ def extract_method(src_code:str, method_lineno:int):
 
     raise Exception
 
-def extract_buggy_method_line(src_code:str, lineno:int):
+def extract_buggy_method_line(src_code:str, lineno:int, need_offset=False):
     # lineno starts from 1
     
     # javalang bug for chart31999
@@ -91,9 +93,12 @@ def extract_buggy_method_line(src_code:str, lineno:int):
                     end = child.position[0]
                     # print('start: {}'.format(start))
                     # print('end: {}'.format(end))
+                    if need_offset:
+                        start = start - 1
+                        end = end - 1
                     if start <= lineno and end >= lineno:
                     # if child.position[0] == lineno:
-                        return node.position[0]
+                        return start
     
     raise Exception
 
@@ -149,7 +154,10 @@ def make_ids(proj:str, mutants_dir:str):
         print(buggy_class_file)
         print(fixed_class_file)
         # buggy_method_line_no = extract_buggy_method_line(buggy_class_content, buggy_line_no)
-        buggy_method_line_no = extract_buggy_method_line(fixed_class_content, buggy_line_no)
+        if proj == 'lang' and i == '4661':
+            buggy_method_line_no = extract_buggy_method_line(fixed_class_content, buggy_line_no, need_offset=True)
+        else:
+            buggy_method_line_no = extract_buggy_method_line(fixed_class_content, buggy_line_no)
         assert buggy_method_line_no <= buggy_line_no, mutants_dir + '\t' + id
         rel_line_no = buggy_line_no - buggy_method_line_no
         rel_line_range = '[' + str(rel_line_no) + ':' + str(rel_line_no + 1) + ']'
@@ -171,19 +179,31 @@ def make_ids(proj:str, mutants_dir:str):
 
 if __name__ == '__main__':
     # proj = sys.argv[1]
-    src_rela_dir = {"chart": "source", "cli": "src/java", "codec": "src/java", "compress": "src/main/java", "csv": "src/main/java",\
-    "gson": "gson/src/main/java", "jacksoncore": "src/main/java", "jacksondatabind": "src/main/java", "jacksonxml": "src/main/java", \
+    # src_rela_dir = {"chart": "source", "cli": "src/java", "codec": "src/java", "compress": "src/main/java", "csv": "src/main/java",\
+    # "gson": "gson/src/main/java", "jacksoncore": "src/main/java", "jacksondatabind": "src/main/java", "jacksonxml": "src/main/java", \
+    #     "jsoup": "src/main/java", "jxpath": "src/java", "lang": "src/main/java", "time": "src/main/java"}
+    src_rela_dir = {"cli": "src/java", "codec": "src/java", "compress": "src/main/java", "csv": "src/main/java",\
+    "gson": "gson/src/main/java", "jacksoncore": "src/main/java", "jacksonxml": "src/main/java", \
         "jsoup": "src/main/java", "jxpath": "src/java", "lang": "src/main/java", "time": "src/main/java"}
-    mutant_root_dir = '/home/jun/APR_FL/dlapr/all_mutants'
+    mutant_root_dir = '../dataset/d4jProj/'
     projects = src_rela_dir.keys()
-    sample_ids_file = 'ids_all_info/sample_1300.ids'
+    sample_ids_file = 'ids_all_info/sample_1100.ids'
+    Path("ids_all_info").mkdir(exist_ok=True)
     sample_ids = get_sample_ids(mutant_root_dir, projects)
     with open(sample_ids_file, 'w') as f:
         for id in sample_ids:
             f.write(id + '\n')
     all_ids = 'all.ids'
-    ids_info_dir = '/home/jun/APR_FL/dlapr/mtapr_recorder/ids_all_info'
+    ids_info_dir = 'ids_all_info'
     
+    (Path(ids_info_dir) / "buggy_classes").mkdir(exist_ok=True)
+    (Path(ids_info_dir) / "fix_classes").mkdir(exist_ok=True)
+    (Path(ids_info_dir) / "buggy_lines").mkdir(exist_ok=True)
+    (Path(ids_info_dir) / "fix_lines").mkdir(exist_ok=True)
+    (Path(ids_info_dir) / "buggy_methods").mkdir(exist_ok=True)
+    (Path(ids_info_dir) / "fix_methods").mkdir(exist_ok=True)
+    (Path(ids_info_dir) / "metas").mkdir(exist_ok=True)
+
     for proj in projects:
         mutants_dir = join(mutant_root_dir, proj + '-1f', 'mutants')
         log_file = join(mutant_root_dir, proj + '-1f', 'mutants.log')
