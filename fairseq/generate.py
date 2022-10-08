@@ -9,7 +9,7 @@
 Translate pre-processed data with a trained model.
 """
 import codecs
-
+import os
 import torch
 import numpy as np
 from fairseq import  bleu,data, options, progress_bar, tasks, tokenizer, utils
@@ -21,7 +21,7 @@ from transformers import GPT2Tokenizer
 #import matplotlib.pyplot as plt
 #from torchvision.utils import save_image
 
-
+os.environ['CUDA_VISIBLE_DEVICES'] = "2"
 
 def main(args):
     assert args.path is not None, '--path required for generation!'

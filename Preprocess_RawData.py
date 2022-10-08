@@ -329,12 +329,12 @@ def preprocess_RewardRepair_fromRaw(ids_f,input_dir,output_prefix,tmp_dir,mode="
     writeL2F(correct_ids, output_prefix + '.ids')
 #preprocess_RewardRepair_fromRaw("/home/zhongwenkang/RawData/Train/trn.ids","/home/zhongwenkang/RawData/Train",
                                 #"/home/zhongwenkang/NPR4J_Data/RewardRepair/trn","/home/zhongwenkang/NPR4J_Data/SequenceR/temp_files")
-preprocess_RewardRepair_fromRaw("E:/NPR4J/RawData (2)/Benchmarks/d4j.ids.new","E:/NPR4J/RawData (2)/Benchmarks",
-                                "D:/RawData_Processed/RewardRepair/d4j","D:/RawData_Processed/RewardRepair/tmp","test")
-preprocess_RewardRepair_fromRaw("E:/NPR4J/RawData (2)/Benchmarks/qbs.ids.new","E:/NPR4J/RawData (2)/Benchmarks",
-                                "D:/RawData_Processed/RewardRepair/qbs","D:/RawData_Processed/RewardRepair/tmp","test")
-preprocess_RewardRepair_fromRaw("E:/NPR4J/RawData (2)/Benchmarks/bears.ids.new","E:/NPR4J/RawData (2)/Benchmarks",
-                                "D:/RawData_Processed/RewardRepair/bears","D:/RawData_Processed/RewardRepair/tmp","test")
+# preprocess_RewardRepair_fromRaw("E:/NPR4J/RawData (2)/Benchmarks/d4j.ids.new","E:/NPR4J/RawData (2)/Benchmarks",
+#                                 "D:/RawData_Processed/RewardRepair/d4j","D:/RawData_Processed/RewardRepair/tmp","test")
+# preprocess_RewardRepair_fromRaw("E:/NPR4J/RawData (2)/Benchmarks/qbs.ids.new","E:/NPR4J/RawData (2)/Benchmarks",
+#                                 "D:/RawData_Processed/RewardRepair/qbs","D:/RawData_Processed/RewardRepair/tmp","test")
+# preprocess_RewardRepair_fromRaw("E:/NPR4J/RawData (2)/Benchmarks/bears.ids.new","E:/NPR4J/RawData (2)/Benchmarks",
+#                                 "D:/RawData_Processed/RewardRepair/bears","D:/RawData_Processed/RewardRepair/tmp","test")
 def preprocess_CodeBertFT_fromRaw(ids_f,input_dir,output_prefix):
     ids=readF2L(ids_f)
     buggy_lines=[]
