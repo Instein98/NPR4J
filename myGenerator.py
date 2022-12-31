@@ -1,13 +1,27 @@
-import re
+import re, os
 import codecs
 from pathlib import Path
 from Preprocess_RawData import Preprocess_CoCoNut_fromRaw
 from translate import translate_CoCoNut
 from Utils.IOHelper import readF2L
 from CoCoNut.tokenization.tokenization import get_strings_numbers, token2statement
+import subprocess as sp
 # from Recovery_Code import Recovery_CoCoNut_all
 
-rawDataDirPath = Path('/home/yicheng/check-apr/dataset/ids_info')
+rawDataDirPath = Path('./ids_all_info').resolve()
+modelDirPath = Path('models/CoCoNut_Trained').resolve()
+configDirPath = Path('Config/mutbench').resolve()
+d4jProjPath = Path('../dataset/d4jProj').resolve()
+predictionDir = rawDataDirPath / 'prediction'
+projNameList = []
+for d in d4jProjPath.iterdir():
+    if d.is_dir():
+        dirName = d.stem
+        m = re.match(r'(\w+?)-\d+f', dirName)
+        assert m is not None
+        projName = m[1]
+        projNameList.append(projName)
+print('Project Names: ' + str(projNameList))
 
 mutInfoDict = {'chart': { 'AOR': [164,165,166,167,170,171,172,173,204,205,206,207,212,213,214,215,371,372,373,374,395,396,397,398,400,401,402,403,404,405,406,407,409,410,411,412,413,414,415,416,428,429,430,431,434,435,436,437], 
                     'COR': [16,17,22,23,31,32,37,38,45,46,51,52,56,57,60,61,85,86,108,109,110,111,117,118,124,125,138,139,153,154,183,184,198,199,224,225,226,227,231,232,235,236,241,242,245,246,263,264,265,266,281,282,284,285,287,288,290,291,293,294,296,297,299,300,302,303,305,306,308,309,311,312,318,319,325,326,330,331,333,334,358,359,365,366,380,381,390,391], 
@@ -31,7 +45,16 @@ mutInfoDict = {'chart': { 'AOR': [164,165,166,167,170,171,172,173,204,205,206,20
 # src_dict_f: dictionary for buggy codes
 # tgt_dict_f: dictionary for fix codes
 
-def preprocess(project: str):  # 'chart' or 'lang'
+def preprocessAll():
+    ids_f = str(rawDataDirPath / 'all.ids')
+    input_dir = str(rawDataDirPath)
+    temp_prefix = str(rawDataDirPath / 'temp')
+    output_dir = str(rawDataDirPath / ('preprocessed'))
+    src_dict_f = str(modelDirPath / 'dict.ctx.txt')
+    tgt_dict_f = str(modelDirPath / 'dict.fix.txt')
+    Preprocess_CoCoNut_fromRaw(ids_f,input_dir,temp_prefix,output_dir,src_dict_f,tgt_dict_f,'test',src_lang="buggy",tgt_lang="fix")
+
+def preprocess(project: str):  # 'chart'
     ids_f = str(rawDataDirPath / (project + '.ids'))
     input_dir = str(rawDataDirPath)
     temp_prefix = str(rawDataDirPath / (project + '-temp'))
@@ -54,6 +77,40 @@ def recovery(project: str, preds_f: str):
 
     Recovery_CoCoNut_all(preds_f,ids_f,buggy_lines_dir,buggy_methods_dir,buggy_classes_dir,output_dir,candi_size=300)
 
+def recover_all(forceCandSize=True, evenly=False):
+    for pred in predictionDir.iterdir():
+        if not str(pred).endswith('.pred'):
+            continue
+    ids_f = str(rawDataDirPath / 'all.ids')
+    buggy_lines_dir = str(rawDataDirPath / 'buggy_lines')
+    buggy_classes_dir = str(rawDataDirPath / 'buggy_classes')
+    buggy_methods_dir = str(rawDataDirPath / 'buggy_methods')
+    output_dir_path = rawDataDirPath / 'patches' / pred.stem
+    if forceCandSize and evenly:
+        output_dir_path = rawDataDirPath / 'patches' / (pred.stem + '-evenly')
+    output_dir_path.mkdir(parents=True, exist_ok=True)
+    output_dir = str(output_dir_path)
+
+    Recovery_CoCoNut_all(str(pred),ids_f,buggy_lines_dir,buggy_methods_dir,buggy_classes_dir,output_dir,candi_size=100,forceCandSize=forceCandSize, evenly=evenly)
+
+def recover_all_sort_all_ensembled(forceCandSize=True, evenly=False):
+    pred_f_list = []
+    for pred in predictionDir.iterdir():
+        if not str(pred).endswith('.pred'):
+            continue
+        pred_f_list.append(str(pred))
+
+    ids_f = str(rawDataDirPath / 'all.ids')
+    buggy_lines_dir = str(rawDataDirPath / 'buggy_lines')
+    buggy_classes_dir = str(rawDataDirPath / 'buggy_classes')
+    buggy_methods_dir = str(rawDataDirPath / 'buggy_methods')
+    output_dir_path = rawDataDirPath / 'patches' / 'all'
+    if forceCandSize and evenly:
+        output_dir_path = rawDataDirPath / 'patches' / ('all' + '-evenly')
+    output_dir_path.mkdir(parents=True, exist_ok=True)
+    output_dir = str(output_dir_path)
+
+    Recovery_CoCoNut_all_unify_all_ensembled(pred_f_list,ids_f,buggy_lines_dir,buggy_methods_dir,buggy_classes_dir,output_dir,candi_size=100,forceCandSize=forceCandSize, evenly=evenly)
 
 def Recovery_CoCoNut_one(buggy_file,pred_str):
     # strings,numbers=get_strings_numbers(buggy_str)
@@ -76,7 +133,69 @@ def get_strings_numbers_from_file(file_path):
             strings_set.update(strings)
     return list(strings_set), list(numbers_set)
 
-def Recovery_CoCoNut_all(preds_f,ids_f,buggy_lines_dir,buggy_methods_dir,buggy_classes_dir,output_dir,candi_size=100):
+def Recovery_CoCoNut_all_unify_all_ensembled(pred_f_list: list,ids_f,buggy_lines_dir,buggy_methods_dir,buggy_classes_dir,output_dir,candi_size=100, forceCandSize=True, evenly=False):
+    ids=readF2L(ids_f)
+    preds_list = [ readF2L(x) for x in pred_f_list ]
+    for x in preds_list:
+        assert len(x) % (candi_size + 2) == 0
+    ind_list = list(range(0, len(preds_list[0]), (candi_size+2)))
+    for i in ind_list:
+        tmp_pred = preds_list[0]
+        group = tmp_pred[i:i+candi_size+2]
+        idx= group[2].split('\t')[0]
+        idx=int(idx[2:])
+        id=ids[idx]
+
+        # collect all patches from all the ensembled models and sort them according to the score
+        abs_patch_list = []
+        for preds in preds_list:
+            group = preds[i:i+candi_size+2]
+            for pred in group[2:]:
+                tmp = pred.split('\t')
+                score = float(tmp[1])
+                pred = tmp[-1]
+                match = False
+                for idx, (s, p) in enumerate(abs_patch_list):
+                    if p.strip() == pred.strip():
+                        match = True
+                        if score > s:
+                            abs_patch_list[idx] = (score, pred)
+                if not match:
+                    abs_patch_list.append((score, pred))
+        abs_patch_list.sort(key=lambda x:x[0], reverse=True)
+
+        patchedLines = []
+        for (score, pred) in abs_patch_list:
+            # rec_line=Recovery_CoCoNut_one(id_buggyline,pred)
+            rec_lines=Recovery_CoCoNut_one(buggy_classes_dir+'/'+id+'.java',pred)
+            # force the number of output patches to be candi_size
+            if forceCandSize:
+                # each abstract patch only generate one concrete patch
+                if evenly:
+                    patchedLines.append(rec_lines[0])
+                # each abstract patch can generate several concrete patch, use top-candi_size of the concrete patches
+                else:
+                    if len(patchedLines) >= candi_size:
+                        break
+                    elif len(patchedLines) + len(rec_lines) <= candi_size:
+                        patchedLines.extend(rec_lines)
+                    else:
+                        candLeft = candi_size - len(patchedLines)
+                        patchedLines.extend(rec_lines[:candLeft])
+                        break
+            else:
+                patchedLines.extend(rec_lines)
+            # rec_method=id_buggymethod.replace(id_buggyline,rec_line)
+            # patches_dict[str(pid)]=rec_method
+        with open(output_dir+'/'+id+'.txt','w',encoding='utf8')as f:
+            # json.dump(patches_dict,f,indent=2)
+            for line in patchedLines:
+                f.write(line + '\n')
+            f.close()
+        print(i)
+    print('='*100)
+
+def Recovery_CoCoNut_all(preds_f,ids_f,buggy_lines_dir,buggy_methods_dir,buggy_classes_dir,output_dir,candi_size=100, forceCandSize=True, evenly=False):
     ids=readF2L(ids_f)
     preds=readF2L(preds_f)
     assert len(preds) % (candi_size + 2) == 0
@@ -94,7 +213,23 @@ def Recovery_CoCoNut_all(preds_f,ids_f,buggy_lines_dir,buggy_methods_dir,buggy_c
             pred=pred.split('\t')[-1]
             # rec_line=Recovery_CoCoNut_one(id_buggyline,pred)
             rec_lines=Recovery_CoCoNut_one(buggy_classes_dir+'/'+id+'.java',pred)
-            patchedLines.extend(rec_lines)
+            # force the number of output patches to be candi_size
+            if forceCandSize:
+                # each abstract patch only generate one concrete patch
+                if evenly:
+                    patchedLines.append(rec_lines[0])
+                # each abstract patch can generate several concrete patch, use top-candi_size of the concrete patches
+                else:
+                    if len(patchedLines) >= candi_size:
+                        break
+                    elif len(patchedLines) + len(rec_lines) <= candi_size:
+                        patchedLines.extend(rec_lines)
+                    else:
+                        candLeft = candi_size - len(patchedLines)
+                        patchedLines.extend(rec_lines[:candLeft])
+                        break
+            else:
+                patchedLines.extend(rec_lines)
             # rec_method=id_buggymethod.replace(id_buggyline,rec_line)
             # patches_dict[str(pid)]=rec_method
         with open(output_dir+'/'+id+'.txt','w',encoding='utf8')as f:
@@ -107,49 +242,110 @@ def Recovery_CoCoNut_all(preds_f,ids_f,buggy_lines_dir,buggy_methods_dir,buggy_c
 
 
 def translateAllCoconut():
+    predictionDir.mkdir(exist_ok=True)
     for i in [5, 7, 9, 12, 15, 21, 32, 33, 35, 99]:
-        for project in ['chart', 'lang']:
-            print('=' * 10 + 'CoCoNut-{}-{}'.format(i, project) + '=' * 10)
-            translate_CoCoNut('/home/yicheng/check-apr/dataset/ids_info/config/CoCoNut-{}-{}.yaml'.format(i, project), False)
+        print('=' * 10 + ' CoCoNut-{} '.format(i) + '=' * 10)
+        translate_CoCoNut(str(configDirPath / 'CoCoNut-{}.yaml'.format(i)), False)
 
-def checkCorrectlyFixedMutants():
+def isExactlySameCode(a:str, b:str):
+    tmp1 = ''.join(a.split())
+    tmp2 = ''.join(b.split())
+    return tmp1 == tmp2
+
+originalD4jProjDirPath = Path('../dataset/d4jProj').resolve()
+def getFinishedProjPath():
+    res = []
+    for dir in originalD4jProjDirPath.iterdir():
+        if dir.is_dir() and (dir / 'sampledMutIds.txt').exists():
+            res.append(dir)
+    return res
+
+def getMutator(projName: str, mutId: str):
+    for projPath in getFinishedProjPath():
+        if (projName + '-') in projPath.stem:
+            mutLog = projPath / 'mutants.log'
+            assert mutLog.exists()
+            with mutLog.open() as log:
+                for line in log:
+                    if line.startswith(mutId + ':'):
+                        m = re.match(r'\d+:(\w+):.*\n', line)
+                        assert m is not None
+                        return m[1]
+
+def checkCorrectlyFixedMutants(evenly=False):
+    correctPatches = []
     fixedmutIds = set()
+    fixedMidDict = {}
+    mutatorDict = {}
     fixLinesDirPath = rawDataDirPath / 'fix_lines'
     patchesDirPath = rawDataDirPath / 'patches'
     for file in fixLinesDirPath.iterdir():
         fileName = file.name
+        subjectName = re.match(r'(\w+?)(\d+)', file.stem)[1]
+        mid = re.match(r'(\w+?)(\d+)', file.stem)[2]
+        if subjectName not in fixedMidDict:
+            fixedMidDict[subjectName] = set()
         with file.open() as f:
             fixedStr = ''.join(f.read().split())
             # print(fixedStr)
         foundCorrectFix = False
         for modelPatchDir in patchesDirPath.iterdir():
+            if not modelPatchDir.name == 'all':
+                continue
+            if evenly:
+                if not modelPatchDir.stem.endswith('-evenly'):
+                    continue
+            else:
+                if modelPatchDir.stem.endswith('-evenly'):
+                    continue
             modelPatchFile = modelPatchDir / fileName
             if modelPatchFile.exists():
+                patchIdx = 1
                 with modelPatchFile.open() as p:
                     for line in p:
                         tmp = ''.join(line.split())
                         if tmp == fixedStr:
                             # print('Found fix!')
                             fixedmutIds.add(file.stem)
+                            correctPatches.append('{}-{}-{}'.format(subjectName, mid, patchIdx))
+                            fixedMidDict[subjectName].add(mid)
+                            mutator = getMutator(subjectName, mid)
+                            if mutator not in mutatorDict:
+                                mutatorDict[mutator] = []
+                            mutatorDict[mutator].append(subjectName + '-' + mid)
                             foundCorrectFix = True
-                            break
+                        patchIdx += 1
+            else:
+                print("Expected patch file {} does not exist!".format(str(modelPatchFile)))
             if foundCorrectFix:
                 break
-    print('Fixed Mutants: ' + str(fixedmutIds))
-    fixedChartIds = []
-    fixedLangIds = []
-    for id in fixedmutIds:
-        m = re.match(r'\w+?(\d+)', id)
-        if 'chart' in id:
-            fixedChartIds.append(int(m[1]))
-        elif 'lang' in id:
-            fixedLangIds.append(int(m[1]))
-    print('Fixed Chart Mutants: ' + str(fixedChartIds))
-    print('len(fixedChartIds): ' + str(len(fixedChartIds)))
-    calculateFixedMutatorNum('chart', fixedChartIds)
-    print('Fixed Lang Mutants: ' + str(fixedLangIds))
-    print('len(fixedLangIds): ' + str(len(fixedLangIds)))
-    calculateFixedMutatorNum('lang', fixedLangIds)
+    proj = [k for k in fixedMidDict]
+    proj.sort()
+    for key in proj:
+        print("{} mutants of {} are correctly (exactly) fixed!".format(len(fixedMidDict[key]), key))
+    mutators = [k for k in mutatorDict]
+    mutators.sort()
+    for m in mutators:
+        print("{}: {}".format(m, mutatorDict[m]))
+    for m in mutators:
+        print("{}: {}".format(m, len(mutatorDict[m])))
+
+    print('coconutCorrectPatches = ' + str(correctPatches))
+    # print('Fixed Mutants: ' + str(fixedmutIds))
+    # fixedChartIds = []
+    # fixedLangIds = []
+    # for id in fixedmutIds:
+    #     m = re.match(r'\w+?(\d+)', id)
+    #     if 'chart' in id:
+    #         fixedChartIds.append(int(m[1]))
+    #     elif 'lang' in id:
+    #         fixedLangIds.append(int(m[1]))
+    # print('Fixed Chart Mutants: ' + str(fixedChartIds))
+    # print('len(fixedChartIds): ' + str(len(fixedChartIds)))
+    # calculateFixedMutatorNum('chart', fixedChartIds)
+    # print('Fixed Lang Mutants: ' + str(fixedLangIds))
+    # print('len(fixedLangIds): ' + str(len(fixedLangIds)))
+    # calculateFixedMutatorNum('lang', fixedLangIds)
 
 def calculateFixedMutatorNum(projectName: str, fixedProjIds):
     assert projectName in mutInfoDict
@@ -161,11 +357,75 @@ def calculateFixedMutatorNum(projectName: str, fixedProjIds):
                 fixedNum += 1
         print('{}: {}'.format(mutator, fixedNum))
 
+def doGeneratePatchedJavaFile(originalFile: Path, repalceLineNum: int, replaceContent: str, outputFile: Path):
+    with originalFile.open() as f:
+        contents = f.readlines()
+    contents[repalceLineNum-1] = replaceContent
+    outputFile.parent.mkdir(parents=True, exist_ok=True)
+    with outputFile.open(mode='w') as f:
+        for line in contents:
+            f.write(line)
+
+def getMutLineNum(projPath: Path, mutId: str):
+    mutLog = projPath / 'mutants.log'
+    assert mutLog.exists()
+    with mutLog.open() as log:
+        for line in log:
+            if line.startswith(mutId + ':'):
+                m = re.match(r'.+:(\d+):.+\n', line)
+                if (m is None):
+                    print("Mutant-{} has no match for '.+:(\d+):[^:]+' in line {}".format(mutId, line))
+                assert m is not None
+                return int(m[1])
+
+def generatePatchedJavaFile(projPath: Path, mid: str, patchLine: str, outputDir: Path, projSrcPath=None):
+    projSrcRelativePath = sp.check_output("defects4j export -p dir.src.classes", shell=True, universal_newlines=True, cwd=str(projPath), stderr=sp.DEVNULL).strip() if projSrcPath is None else projSrcPath
+    shortPath = sp.check_output('find . -name "*.java"', shell=True, universal_newlines=True, cwd=str(projPath / 'mutants' / mid)).strip()
+    mutLineNum = getMutLineNum(projPath, mid)
+    originalJavaFilePath = projPath / 'mutants' / mid / shortPath
+    doGeneratePatchedJavaFile(originalJavaFilePath, mutLineNum, patchLine, outputDir / shortPath)
+
+patchedSourceOutputDir = Path('coconut_patches').resolve()
+
+def collectSourcePatches():
+    src_rela_dir = {"chart": "source", "cli": "src/java", "closure": "src", "codec": "src/java", "collections": "src/main/java", "compress": "src/main/java", "csv": "src/main/java",\
+    "gson": "gson/src/main/java", "jacksoncore": "src/main/java", "jacksondatabind": "src/main/java", "jacksonxml": "src/main/java", \
+    "jsoup": "src/main/java", "jxpath": "src/java", "lang": "src/main/java", "math": "src/main/java", "mockito": "src", "time": "src/main/java"}
+    for patchFile in (rawDataDirPath / 'patches' / 'all').iterdir():
+        if not patchFile.name.endswith('.txt'):
+            continue
+        m = re.match(r'(\w+?)(\d+)', patchFile.stem)
+        assert m is not None
+        projName = m[1]
+        mid = m[2]
+        for projPath in d4jProjPath.iterdir():
+            if projName == projPath.stem.split('-')[0]:
+                projSrcRelativePath = src_rela_dir[projName]
+                with patchFile.open() as f:
+                    patchId = 1
+                    for patchLine in f:
+                        print('Processing {}-{}-{}'.format(projName, mid, patchId))
+                        targetOutputDir = patchedSourceOutputDir / (projName + '_' + mid) / 'patches-pool' / str(patchId)
+                        generatePatchedJavaFile(projPath, mid, patchLine, targetOutputDir, projSrcPath=projSrcRelativePath)
+                        patchId += 1
+
 if __name__ == '__main__':
+    os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+    os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+    # preprocessAll()
     # translateAllCoconut()
+    # recover_all(forceCandSize=True, evenly=True)
+    # recover_all(forceCandSize=True, evenly=False)
+    # checkCorrectlyFixedMutants(evenly=False)
+
+    # recover_all_sort_all_ensembled()
+    # checkCorrectlyFixedMutants(evenly=False)
+    collectSourcePatches()
+
+
     # preprocess('chart')
     # preprocess('lang')
-    translate_CoCoNut('/home/yicheng/check-apr/dataset/ids_info/config/CoCoNut-5-chart-test.yaml', False)
+    # translate_CoCoNut('/home/yicheng/check-apr/dataset/ids_info/config/CoCoNut-5-chart-test.yaml', False)
     # Recovery_CoCoNut_all(preds_f,ids_f,buggy_lines_dir,buggy_methods_dir,output_dir,candi_size=100)
 
     # recovery('chart', '/home/yicheng/check-apr/dataset/ids_info/prediction/CoCoNut-5-chart.pred')

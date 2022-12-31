@@ -21,7 +21,6 @@ from transformers import GPT2Tokenizer
 #import matplotlib.pyplot as plt
 #from torchvision.utils import save_image
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "2"
 
 def main(args):
     assert args.path is not None, '--path required for generation!'

@@ -125,4 +125,6 @@ def main():
     time_sum=end-start
     print("total_time",time_sum)
 if __name__ == "__main__":
-    main()
+    os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+    # main()
+    translate_PatchEdits('/home/yicheng/research/mutBench/npr4j/Config/mutbench/edits.yaml')

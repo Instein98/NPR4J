@@ -102,8 +102,8 @@ def preprocess_SequenceR_fromRaw(ids_f,input_dir,output_prefix,tmp_dir):
                     err_end=int(buginfo["err_end"])
                     err_start=int(buginfo["err_start"])
                     err_end=min(len(method)-1,err_end)
-                    method[err_end] = "<END_BUG> " + method[err_end].strip()
-                    method[err_start] = "<START_BUG> " + method[err_start].strip()
+                    method[err_end] = "<END_BUG> " + method[err_end]
+                    method[err_start] = "<START_BUG> " + method[err_start]
                     method=' '.join(method)
                     try:
                         toked_bug = javalang.tokenizer.tokenize(method)
@@ -484,7 +484,7 @@ def Preprocess_PatchEdits_fromSequenceR(ids_f,SequenceR_buggy_f,SequenceR_fix_f,
         code = code.strip().split()
         start_index = code.index("<START_BUG>")
         code.remove("<START_BUG>")
-        end_index = code.index("<END_BUG>")
+        end_index = code.index("<END_BUG>") - 1
         code.remove("<END_BUG>")
         dataset = 'test'
         data = f"{dataset} ### {' '.join(code)} ### {start_index} {end_index} ### <s> {fix_code} </s>\n"

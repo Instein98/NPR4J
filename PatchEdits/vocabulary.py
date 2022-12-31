@@ -18,7 +18,14 @@ class VocabularyBuilder():
 	
 	def load_vocab(self, vocab_path):
 		with open(vocab_path, "r", encoding="utf8") as f:	
-			vocab = [l.rstrip('\n').split()[1] for l in f.readlines()]
+			vocab = []
+			for line in f.readlines():
+				tmp = line[:-1].split('\t')
+				if len(tmp) < 2:
+					print(line)
+					print(tmp)
+				vocab.append(tmp[1])
+			# vocab = [l.rstrip('\n').split()[1] for l in f.readlines()]
 		print(len(vocab))
 		self.w2i = {w:i for i, w in enumerate(vocab)}
 		self.i2w = {i:w for w, i in self.w2i.items()}

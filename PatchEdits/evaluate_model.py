@@ -10,10 +10,18 @@ from PatchEdits.metrics import MetricsTracker
 from PatchEdits.tracker import Tracker
 from PatchEdits.transformer_patching_model import TransformerPatchingModel
 
+def configure_tf_gpu_mem(max_megabytes=None):
+    for gpu in tf.config.list_physical_devices("GPU"):
+        tf.config.experimental.set_memory_growth(gpu, True)
+        if isinstance(max_megabytes, int):
+            tf.config.set_logical_device_configuration(
+                gpu, [tf.config.LogicalDeviceConfiguration(memory_limit=max_megabytes)]
+            )
 
 
 def PatchEdits_translate(data_path,vocabulary_f,preds_f,beam_size,model_path,log_path):
-	config = yaml.safe_load(open("/home/gehongliang/zwk/NPR4J/PatchEdits/config.yml"))
+	configure_tf_gpu_mem()
+	config = yaml.safe_load(open("/home/yicheng/research/mutBench/edits/model/config.yml"))
 	config["data"]["beam_size"]=beam_size
 	data = DataReader(config["data"], data_file=data_path, vocab_path=vocabulary_f)
 	model = TransformerPatchingModel(config["transformer"], data.vocabulary.vocab_dim, is_pointer=config["data"]["edits"])
